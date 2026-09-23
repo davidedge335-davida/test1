@@ -28,10 +28,34 @@ E3cover-acm/
 All Python imports use the `e3covernet` namespace. The main model class is
 `e3covernet.models.e3covernet.E3CoverNet`.
 
+## Version 2 architecture
+
+The second implementation adds the complete progressive geometry backbone and
+two task-specific pipelines without removing the original training path:
+
+- `models/backbone/e3covernet/`: radial-basis distance encoding, learned
+  E(1)/E(2)/E(3) coverings, geometry-aware attention, progressive lift blocks,
+  and the three-stage backbone.
+- `models/fusion/`: bidirectional cross-attention between language tokens and
+  object features.
+- `models/grounding/`: the unified 3D visual-grounding network.
+- `models/losses/` and `models/retrieval/`: symmetric InfoNCE and the
+  text-to-shape dual-tower model.
+- `scripts/train_grounding.py` and `scripts/train_text2shape.py`: standalone
+  tensor-interface smoke-training entry points.
+- `tests/test_equivariance.py`: rotation/reflection equivariance, invariance,
+  ablation-construction, grounding, and gradient checks.
+
+The original listener remains available in `models/e3covernet.py`. The version
+2 backbone is imported explicitly from
+`e3covernet.models.backbone.e3covernet`, so the two APIs do not shadow one
+another.
+
 ## Requirements
 
 - Python 3
 - PyTorch with a CUDA version compatible with the local system
+- Transformers for the default frozen BERT text encoder
 - The Python dependencies declared in [`setup.py`](setup.py)
 - A C++/CUDA build toolchain when using the PointNet++ extension
 
@@ -114,6 +138,35 @@ python e3covernet/scripts/train_e3covernet.py \
 
 Run `python e3covernet/scripts/train_e3covernet.py --help` for the complete set
 of model, dataset, optimization, and logging options.
+
+## Version 2 smoke training
+
+The new task scripts use generated tensors by default, allowing the model and
+optimizer paths to be checked before connecting a dataset. Pass `--no-bert` to
+avoid downloading BERT weights:
+
+```bash
+python e3covernet/scripts/train_text2shape.py \
+  --epochs 1 --batches-per-epoch 1 --batch-size 2 \
+  --num-points 64 --no-bert
+
+python e3covernet/scripts/train_grounding.py \
+  --epochs 1 --batches-per-epoch 1 --batch-size 2 \
+  --max-objects 4 --num-points 64 --no-bert
+```
+
+For real training, replace each script's generated batch iterator with the
+project's prepared data loader while preserving the documented tensor shapes.
+
+## Equivariance validation
+
+```bash
+python tests/test_equivariance.py
+```
+
+This suite checks both rotations and reflections, the complete backbone,
+symmetric shapes, supported ablation variants, the grounding pipeline, and
+finite backward gradients.
 
 ## Citation
 
