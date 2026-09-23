@@ -60,9 +60,13 @@ if __name__ == '__main__':
     print('Working with {} scans.'.format(len(all_scan_ids)))
 
     # Prepare ScannetDataset
-    idx_to_semantic_class_file = '../data/mappings/scannet_idx_to_semantic_class.json'
-    instance_class_to_semantic_class_file = '../data/mappings/scannet_instance_class_to_semantic_class.json'
-    axis_alignment_info_file = '../data/scannet/scans_axis_alignment_matrices.json'
+    package_dir = osp.abspath(osp.join(osp.dirname(__file__), '..'))
+    idx_to_semantic_class_file = osp.join(
+        package_dir, 'data/mappings/scannet_idx_to_semantic_class.json')
+    instance_class_to_semantic_class_file = osp.join(
+        package_dir, 'data/mappings/scannet_instance_class_to_semantic_class.json')
+    axis_alignment_info_file = osp.join(
+        package_dir, 'data/scannet/scans_axis_alignment_matrices.json')
 
     scannet = ScannetDataset(args.top_scan_dir,
                              idx_to_semantic_class_file,

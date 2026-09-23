@@ -11,10 +11,17 @@ you will need to download the following files for each scan.
 ```
 
 # Preprocess data for E3CoverNet
-For Nr3d, you need to preprocess only _00 ScanNet scenes but for sr3d you need to add the `` --process-only-zero-view false`` argument
+
+Run preprocessing from the project root. For Nr3D, the default configuration
+processes only ScanNet `_00` scenes:
+
+```bash
+python e3covernet/scripts/prepare_scannet_data.py \
+  -top-scan-dir /path/to/scannet/scans \
+  -top-save-dir /path/to/preprocessed-data
 ```
-cd e3covernet/scripts
-python prepare_scannet_data.py -top-scan-dir path_to_scans_dir -top-save-dir save_dir
-```
-This scripts will load for each scan its point-clouds with annotations and pickle the results in 
-a single file. Use the default options for nr3d. you can safely ignore the scene0009_00 warning.
+
+For Sr3D, process all views by appending
+`--process-only-zero-view false`. The script loads each scan's annotated point
+clouds and writes the resulting pickle under the requested output directory.
+The `scene0009_00` warning can be safely ignored.
