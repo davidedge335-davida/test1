@@ -8,6 +8,9 @@ objects in real-world 3D scenes from natural-language descriptions. The
 repository contains the model, data preparation utilities, training and
 evaluation code, and the Nr3D/Sr3D data-processing pipeline.
 
+All commands below assume the current directory is `E3cover-acm/`, the directory
+that contains this README and `setup.py`.
+
 ## Repository layout
 
 ```text
@@ -16,23 +19,30 @@ E3cover-acm/
 │   ├── analysis/          # Prediction and language-analysis utilities
 │   ├── data/              # Metadata, mappings, and dataset split files
 │   ├── data_generation/   # Nr3D and Sr3D preparation tools
+│   ├── external_tools/    # Vendored Scan2CAD and PointNet++ code
 │   ├── in_out/            # Dataset loading and command-line arguments
-│   ├── models/            # E3CoverNet and its backbone modules
+│   ├── models/            # Listener, geometry backbone, fusion, and task heads
 │   ├── scripts/           # Training and preprocessing entry points
 │   └── utils/             # Evaluation, logging, and visualization helpers
+├── images/                 # Documentation assets
+├── tests/                  # Layout and numerical model checks
 ├── LICENSE
 ├── README.md
 └── setup.py
 ```
 
-All Python imports use the `e3covernet` namespace. The main model class is
-`e3covernet.models.e3covernet.E3CoverNet`.
+All Python imports use the `e3covernet` namespace. There are two intentionally
+distinct `E3CoverNet` classes:
+
+- `e3covernet.models.backbone.e3covernet.E3CoverNet` is the progressive
+  geometry backbone used by the new grounding and retrieval heads.
+- `e3covernet.models.e3covernet.E3CoverNet` is the original listener model used
+  by `train_e3covernet.py`.
 
 ## Architecture
 
-The official implementation includes the complete progressive geometry
-backbone and two task-specific pipelines while preserving the listener training
-path:
+The implementation includes the progressive geometry backbone, grounding and
+retrieval model components, and the dataset-backed listener training path:
 
 - `models/backbone/e3covernet/`: radial-basis distance encoding, learned
   E(1)/E(2)/E(3) coverings, geometry-aware attention, progressive lift blocks,
@@ -42,8 +52,6 @@ path:
 - `models/grounding/`: the unified 3D visual-grounding network.
 - `models/losses/` and `models/retrieval/`: symmetric InfoNCE and the
   text-to-shape dual-tower model.
-- `scripts/train_grounding.py` and `scripts/train_text2shape.py`: standalone
-  tensor-interface smoke-training entry points.
 - `tests/test_equivariance.py`: rotation/reflection equivariance, invariance,
   ablation-construction, grounding, and gradient checks.
 
@@ -54,11 +62,12 @@ another.
 
 ## Requirements
 
-- Python 3
-- PyTorch with a CUDA version compatible with the local system
+- Python 3.8 or newer (as declared by `setup.py`)
+- PyTorch; install the CPU or CUDA build appropriate for the local system
 - Transformers for the default frozen BERT text encoder
 - The Python dependencies declared in [`setup.py`](setup.py)
-- A C++/CUDA build toolchain when using the PointNet++ extension
+- A CUDA-capable PyTorch installation, CUDA toolkit, and C++ compiler to build
+  the PointNet++ extension required by the original listener
 
 ## Installation
 
@@ -68,21 +77,33 @@ Run the following commands from the directory containing this README:
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
+# Install the appropriate PyTorch build first; see https://pytorch.org/get-started/locally/
+python -m pip install torch
 python -m pip install -e .
 ```
+
+PyTorch is deliberately installed separately because its correct package/index
+depends on whether the machine uses CPU, CUDA, or another accelerator. The
+editable install provides the remaining declared dependencies, including
+Transformers and NLTK.
 
 `pip` may create an isolated build environment and download build tools. If the
 machine uses a restricted package proxy, configure that proxy or install
 `setuptools` and `wheel` from the organization's package mirror before running
 the editable-install command.
 
-To build the optional PointNet++ CUDA extension:
+To build the PointNet++ CUDA extension used by the original listener:
 
 ```bash
 cd e3covernet/external_tools/pointnet2
 python setup.py install
 cd ../../../
 ```
+
+The progressive backbone itself does not require this extension and can run on
+CPU. `train_e3covernet.py` is CUDA-only and defaults to the PointNet++ object
+encoder, so dataset-backed listener training needs both a CUDA device and the
+extension.
 
 ## Data preparation
 
@@ -101,13 +122,48 @@ python e3covernet/scripts/prepare_scannet_data.py \
 Use `python e3covernet/scripts/prepare_scannet_data.py --help` to confirm the
 arguments supported by the local checkout.
 
+The command writes
+`/path/to/preprocessed-data/keep_all_points_00_view_with_global_scan_alignment/keep_all_points_00_view_with_global_scan_alignment.pkl`
+with the defaults. For Sr3D, add `--process-only-zero-view false` so all scan
+views are retained.
+
 ### Language data
 
-The training pipeline accepts prepared Nr3D or Sr3D CSV files. Sr3D generation
-utilities and configuration files are under
+The listener consumes a processed Nr3D or Sr3D CSV, not the raw download. First
+download the NLTK tokenizer data:
+
+```bash
+python -m nltk.downloader punkt punkt_tab
+```
+
+Prepare Nr3D with a newline-delimited English vocabulary (for example, one
+derived from the GloVe vocabulary):
+
+```bash
+python e3covernet/scripts/prepare_referential_data.py \
+  -scannet-file /path/to/scannet.pkl \
+  -type nr3d \
+  -out-file /path/to/nr3d-preprocessed.csv \
+  --nr3d-file /path/to/nr3d.csv \
+  --vocab-file /path/to/glove-vocabulary.txt
+```
+
+For Sr3D, no external vocabulary or spell-checking dictionary is needed:
+
+```bash
+python e3covernet/scripts/prepare_referential_data.py \
+  -scannet-file /path/to/scannet.pkl \
+  -type sr3d \
+  -out-file /path/to/sr3d-preprocessed.csv \
+  --sr3d-file /path/to/sr3d.csv
+```
+
+The bundled SymSpell dictionary is selected automatically. It can be replaced
+with `--word-freq-file /path/to/dictionary.txt`. Sr3D generation utilities and
+configuration files are under
 [`e3covernet/data_generation/sr3d`](e3covernet/data_generation/sr3d).
 
-## Training
+## Listener training
 
 After installing the package, run training from the project root:
 
@@ -119,13 +175,18 @@ python e3covernet/scripts/train_e3covernet.py \
   --n-workers 4
 ```
 
+Here `-scannet-file` is the pickle produced by ScanNet preprocessing and
+`-e3covernet-file` is one of the processed language CSVs above. A CUDA device
+and the PointNet++ extension are required. `--log-dir` is mandatory for a new
+training run; the parser accepts `--resume-path` instead when resuming.
+
 To augment Nr3D training with Sr3D, add:
 
 ```bash
 --augment-with-sr3d /path/to/sr3d.csv
 ```
 
-## Evaluation
+## Listener evaluation
 
 ```bash
 python e3covernet/scripts/train_e3covernet.py \
@@ -140,34 +201,17 @@ python e3covernet/scripts/train_e3covernet.py \
 Run `python e3covernet/scripts/train_e3covernet.py --help` for the complete set
 of model, dataset, optimization, and logging options.
 
-## Smoke training
-
-The new task scripts use generated tensors by default, allowing the model and
-optimizer paths to be checked before connecting a dataset. Pass `--no-bert` to
-avoid downloading BERT weights:
-
-```bash
-python e3covernet/scripts/train_text2shape.py \
-  --epochs 1 --batches-per-epoch 1 --batch-size 2 \
-  --num-points 64 --no-bert
-
-python e3covernet/scripts/train_grounding.py \
-  --epochs 1 --batches-per-epoch 1 --batch-size 2 \
-  --max-objects 4 --num-points 64 --no-bert
-```
-
-For real training, replace each script's generated batch iterator with the
-project's prepared data loader while preserving the documented tensor shapes.
-
 ## Equivariance validation
 
 ```bash
+python -m unittest tests/test_package_layout.py
 python tests/test_equivariance.py
 ```
 
-This suite checks both rotations and reflections, the complete backbone,
-symmetric shapes, supported ablation variants, the grounding pipeline, and
-finite backward gradients.
+The first command performs dependency-free package-layout regression checks.
+The second requires PyTorch and checks both rotations and reflections, the
+complete backbone, symmetric shapes, supported ablation variants, the grounding
+pipeline, and finite backward gradients.
 
 ## Citation
 
