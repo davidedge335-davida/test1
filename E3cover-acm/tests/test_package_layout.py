@@ -1,4 +1,4 @@
-"""Dependency-free checks for the merged E3CoverNet version 2 layout."""
+"""Dependency-free checks for the official E3CoverNet package layout."""
 
 import ast
 import re
@@ -9,7 +9,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = PROJECT_ROOT / "e3covernet"
 
-VERSION_2_FILES = {
+OFFICIAL_MODEL_FILES = {
     "models/backbone/e3covernet/__init__.py",
     "models/backbone/e3covernet/attention.py",
     "models/backbone/e3covernet/backbone.py",
@@ -39,9 +39,9 @@ FORBIDDEN_TERMS = re.compile(
 
 
 class PackageLayoutTests(unittest.TestCase):
-    def test_version_2_manifest_is_complete(self):
+    def test_official_model_manifest_is_complete(self):
         missing = sorted(
-            relative for relative in VERSION_2_FILES
+            relative for relative in OFFICIAL_MODEL_FILES
             if not (PACKAGE_ROOT / relative).is_file()
         )
         self.assertEqual(missing, [])

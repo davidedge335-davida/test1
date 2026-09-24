@@ -28,10 +28,11 @@ E3cover-acm/
 All Python imports use the `e3covernet` namespace. The main model class is
 `e3covernet.models.e3covernet.E3CoverNet`.
 
-## Version 2 architecture
+## Architecture
 
-The second implementation adds the complete progressive geometry backbone and
-two task-specific pipelines without removing the original training path:
+The official implementation includes the complete progressive geometry
+backbone and two task-specific pipelines while preserving the listener training
+path:
 
 - `models/backbone/e3covernet/`: radial-basis distance encoding, learned
   E(1)/E(2)/E(3) coverings, geometry-aware attention, progressive lift blocks,
@@ -46,8 +47,8 @@ two task-specific pipelines without removing the original training path:
 - `tests/test_equivariance.py`: rotation/reflection equivariance, invariance,
   ablation-construction, grounding, and gradient checks.
 
-The original listener remains available in `models/e3covernet.py`. The version
-2 backbone is imported explicitly from
+The listener remains available in `models/e3covernet.py`. The geometry backbone
+is imported explicitly from
 `e3covernet.models.backbone.e3covernet`, so the two APIs do not shadow one
 another.
 
@@ -139,7 +140,7 @@ python e3covernet/scripts/train_e3covernet.py \
 Run `python e3covernet/scripts/train_e3covernet.py --help` for the complete set
 of model, dataset, optimization, and logging options.
 
-## Version 2 smoke training
+## Smoke training
 
 The new task scripts use generated tensors by default, allowing the model and
 optimizer paths to be checked before connecting a dataset. Pass `--no-bert` to

@@ -11,7 +11,7 @@ for namespace_package in (
         packages.append(namespace_package)
 
 setup(name='E3CoverNet',
-      version='2.0.0',
+      version='2026',
       description='Progressive E(3)-aware 3D vision-language alignment.',
       url='https://github.com/E3CoverNet/E3CoverNet',
       author='E3CoverNet team',

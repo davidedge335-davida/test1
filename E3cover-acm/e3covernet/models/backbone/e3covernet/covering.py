@@ -44,7 +44,7 @@ def pca_frame(z: torch.Tensor):
         z: [B, N, 3] 点坐标
     Returns:
         mean:  [B, 1, 3] 质心
-        evecs: [B, 3, 3] 列向量为特征向量, 按特征值从大到小排列 (v1|v2|v3)
+        evecs: [B, 3, 3] 列向量为特征向量, 按特征值从大到小排列
 
     注: 整体 no_grad + detach —— 参考系是输入的确定性函数, 等变性由
         "frame 随 g 协变 ⇒ frame 内坐标不变" 保证, 不需要梯度流过 eigh。
@@ -55,7 +55,7 @@ def pca_frame(z: torch.Tensor):
     mean = z.mean(dim=1, keepdim=True)                      # [B,1,3]
     zc = z - mean
     cov = torch.einsum("bni,bnj->bij", zc, zc) / z.shape[1]  # [B,3,3]
-    # eigh 返回特征值升序; flip 到降序得 v1(主轴), v2, v3
+    # eigh 返回特征值升序; flip 后按主轴、次轴、第三轴降序排列
     _, evecs = torch.linalg.eigh(cov)
     evecs = evecs.flip(-1)                                   # [B,3,3]
     # 固定符号 —— 必须用 *协变* 规则 (随数据一起变换), 否则参考系不等变:
@@ -95,8 +95,8 @@ class CoveringE1(nn.Module):
         Returns: c [B,N,K1] —— 点到各平移锚点的 1D 距离 (E(3)-不变)
         """
         mean, evecs = pca_frame(z)
-        v1 = evecs[..., 0]                                   # [B,3] 主轴
-        proj = torch.einsum("bnd,bd->bn", z - mean, v1)      # [B,N] 1D 投影 z^(1)_i
+        primary_axis = evecs[..., 0]                          # [B,3] 主轴
+        proj = torch.einsum("bnd,bd->bn", z - mean, primary_axis)  # [B,N] 1D 投影
         # 每个点云各自的分位数锚点 (detach: 锚点基座由数据决定, 论文的
         # "initialized at quartile positions"; 可学习部分在 offset 上)
         base = torch.quantile(proj.detach(), self.quantiles.to(proj.dtype), dim=1)  # [K1,B]
@@ -126,7 +126,7 @@ class CoveringE2(nn.Module):
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         """
         Args:  z [B,N,3]
-        Returns: c [B,N,K2] —— 覆盖旋转 R(θ_k) 作用在 (v1,v2) 平面坐标上
+        Returns: c [B,N,K2] —— 覆盖旋转 R(θ_k) 作用在主轴平面坐标上
                               引起的弦位移范数 ||u_i - R(θ_k)u_i|| (不变)
         """
         mean, evecs = pca_frame(z)
